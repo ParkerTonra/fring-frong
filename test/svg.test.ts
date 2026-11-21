@@ -68,7 +68,7 @@ const fanned = (n: number, at = 0) => {
   for (let i = 0; i < n; i++) s = agentStart(s, 'a' + i, at)
   return s
 }
-const FROG_SAD = ['........', '.DGGGGD.', 'GDDGGDDG', 'GGWKGWKG', '.GGRRGG.', '.BRGGRB.'] // now-playing's
+const FROG_SAD = ['........', '.DGGGGD.', 'GDDGGDDG', 'GGWKGWKG', '.GGRRGG.', '.BRGGRB.'] // pong.ts FROG_SAD, the frog at rest
 const ORIGINALS: Record<FrogPose, readonly string[]> = {
   down: FROG_DOWN, up: FROG_UP, face: FROG_FACE, tap: FROG_TAP, shrug: FROG_SHRUG, yawn: FROG_YAWN, sleep: FROG_SLEEP,
   flat: FROG_FLAT, tongue: FROG_TONGUE, sad: FROG_SAD,

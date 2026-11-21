@@ -3,12 +3,14 @@
 
 import {
   BALL,
+  BALL_HI,
   Canvas,
   EMPTY,
   FLY,
   FROG_DOWN,
   FROG_FACE,
   FROG_FLAT,
+  FROG_SAD,
   FROG_SHRUG,
   FROG_SLEEP,
   FROG_TAP,
@@ -132,9 +134,9 @@ export const initial = (seed = 1): Show => ({
   seed: (Math.imul(seed | 0, 0x9e3779b1) ^ 0x85ebca6b) >>> 0 || 1, // spread small seeds out
 })
 
-const within = (at: number | null, now: number, ms: number): boolean => at !== null && now >= at && now - at < ms
-const BONK_MS = T.dash + T.bonk + T.back
-const BEAN_MS = T.beanFly + T.bean + T.getUp
+export const within = (at: number | null, now: number, ms: number): boolean => at !== null && now >= at && now - at < ms
+export const BONK_MS = T.dash + T.bonk + T.back
+export const BEAN_MS = T.beanFly + T.bean + T.getUp
 
 /** Who touched the ball last: the left frog while it flies right (p 0..1), else the right. */
 export const lastTouch = (p: number): Side => ((((p % 2) + 2) % 2) < 1 ? 'left' : 'right')
@@ -227,7 +229,7 @@ const prune = (s: Show, now: number): Show =>
 
 // ---- time ----
 
-const squishing = (s: Show, now: number): boolean =>
+export const squishing = (s: Show, now: number): boolean =>
   s.squishAt !== null && (s.squishEndAt === null ? now - s.squishAt < T.squishMax : now - s.squishEndAt < T.pop)
 
 /** The outro of the turn that just ended (the shrug or the winner's hop) is still playing. */
@@ -237,7 +239,7 @@ export const outro = (s: Show, now: number): boolean =>
 /** Where the band is drawn at all: work running (a turn or a subagent), sleep, an outro or a squish. */
 export const visible = (s: Show, now: number): boolean => s.working || s.turnAt !== null || s.sleepAt !== null || outro(s, now) || squishing(s, now)
 
-const rallying = (s: Show, now: number): boolean =>
+export const rallying = (s: Show, now: number): boolean =>
   s.working && s.sleepAt === null && s.waitAt === null && !squishing(s, now) && !outro(s, now) &&
   !within(s.bonkAt, now, BONK_MS) && !within(s.beanAt, now, BEAN_MS) && !within(s.wakeAt, now, T.wake)
 
@@ -261,7 +263,7 @@ export function step(s: Show, now: number): Show {
 // ---- pictures ----
 
 /** A big frog's pose by name: the terminal's sprite in pong.ts, and the desktop's detailed one in sprites.ts. */
-export type PoseName = 'up' | 'down' | 'face' | 'tap' | 'shrug' | 'yawn' | 'sleep' | 'flat' | 'tongue'
+export type PoseName = 'up' | 'down' | 'face' | 'tap' | 'shrug' | 'yawn' | 'sleep' | 'flat' | 'tongue' | 'sad'
 const POSES: Readonly<Record<PoseName, readonly string[]>> = {
   up: FROG_UP,
   down: FROG_DOWN,
@@ -272,6 +274,7 @@ const POSES: Readonly<Record<PoseName, readonly string[]>> = {
   sleep: FROG_SLEEP,
   flat: FROG_FLAT,
   tongue: FROG_TONGUE,
+  sad: FROG_SAD,
 }
 /** A big frog at one moment: its pose, hopped a pixel up, flipped over, stars twinkling over it (their phase). */
 export type FrogLook = { pose: PoseName; hop?: boolean; flip?: boolean; stars?: number }
@@ -283,12 +286,18 @@ export type FrogLook = { pose: PoseName; hop?: boolean; flip?: boolean; stars?: 
 export type Look = {
   left: FrogLook | null
   right: FrogLook | null
-  ball: { x: number; y: number } | null
+  ball: { x: number; y: number; hi?: boolean } | null
   froglets: { column: number; mirror: boolean; stars?: number }[]
+  /** false: no little table under the frogs, the table's cells drawn as they are (an add-on's scene); else the table. */
+  board?: boolean
 }
 
 /** `crowd`: Claude's fans, laid on the table as cells by layFans; `look`: the frame by name (see Look). */
 export type Frame = { left: Cell[]; table: Cell[]; right: Cell[]; crowd?: Crowd; look?: Look }
+
+/** How a frame is drawn: `high` the ball raised into the top row, clear of a living table top laid under the match
+ * (see highBallAt); `squishFirst` the squish shown over everything, sleep and the outro too. Neither: Fring Frong's own. */
+export type FrameOptions = { high?: boolean; squishFirst?: boolean }
 
 /** A FrogLook's pixel rows, as the terminal draws it. */
 export function frogPixels(l: FrogLook | null): readonly string[] {
@@ -299,11 +308,25 @@ export function frogPixels(l: FrogLook | null): readonly string[] {
   if (l.hop) p = hopped(p)
   return p
 }
-const frogCells = (l: FrogLook | null, side: Side): Cell[] => spriteCells(frogPixels(l), side === 'right')
+/** A FrogLook as the terminal's cells, mirrored for the right frog. */
+export const frogCells = (l: FrogLook | null, side: Side): Cell[] => spriteCells(frogPixels(l), side === 'right')
 const zzz = (cells: Cell[], t: number): Cell[] => letters(cells, FROG_COLUMNS, 0, ['z Z z   ', ' z Z z  ', '  z Z z '][Math.floor(t / 400) % 3]!, 0x9aa8c8)
 
-/** Braille colours that stay over the fans: the ball, the fly, the tongue. */
-const ON_TOP = new Set([BALL, FLY, TONGUE])
+/** Braille colours that stay over the fans (and over a table top laid under the match): the ball, the fly, the tongue. */
+export const ON_TOP: ReadonlySet<number> = new Set([BALL, BALL_HI, FLY, TONGUE])
+
+/**
+ * Where the ball flies in `high` frames: a low arc inside the top cell row, so a whole clear cell row keeps it apart
+ * from what is laid on the bottom one, and clear of the score's corner columns.
+ */
+export function highBallAt(p: number): { x: number; y: number } {
+  const q = ((p % 2) + 2) % 2
+  const u = q < 1 ? q : 2 - q
+  return { x: SCORE_W * 2 + Math.round(u * (HIGH_MAX_X - SCORE_W * 2)), y: HIGH_REST_Y - Math.round(4 * u * (1 - u) * HIGH_REST_Y) }
+}
+/** The high ball's limits, in dots: its top-left's lowest y (resting, still in the top row) and its rightmost x. */
+export const HIGH_REST_Y = 2
+export const HIGH_MAX_X = (COLUMNS - SCORE_W) * 2 - 2
 
 /** One fan at one moment: its left column on the table, how many whole cell rows up (0..2), cheering, which way it looks. */
 export type Pose = { column: number; lift: number; cheer: boolean; look: Side }
@@ -317,13 +340,13 @@ export type Crowd = { fans: Pose[]; more: number }
  * one cell row tall, and half a cell off would put see-through, eye and face colours in one cell (three colours).
  * Seated, bobbing and cheering they keep below the top row, the fly's.
  */
-export function crowd(s: Show, now: number): Crowd {
+export function crowd(s: Show, now: number, high = false): Crowd {
   const shown = s.fans.slice(0, MAX_FANS)
   const more = fanCount(s) - shown.filter((f) => f.goneAt === null).length
   const cheering = outro(s, now) && s.endKind === 'win' && s.winner === 'right'
   const asleep = s.sleepAt !== null
   // the fans watch the ball: their eyes follow it while the rally runs (it is in cells here, its dots halved)
-  const ballColumn = s.working && s.sleepAt === null ? ballAt(s.p, COLUMNS, ROWS).x / 2 : -1
+  const ballColumn = s.working && s.sleepAt === null ? (high ? highBallAt(s.p) : ballAt(s.p, COLUMNS, ROWS)).x / 2 : -1
   const fans = shown.map((f, k): Pose => {
     const column = fanColumn(k)
     const look: Side = ballColumn > column + FAN_W / 2 ? 'right' : 'left'
@@ -407,20 +430,57 @@ export function withScore(table: readonly Cell[], sc: Score): Cell[] {
 }
 
 /** The pictures at `now`, from the most pressing thing going on down to the plain rally; Claude's fans with them. */
-export function frame(s: Show, now: number): Frame {
-  const f = matchFrame(s, now)
-  return s.fans.length > 0 ? { ...f, crowd: crowd(s, now) } : f
+export function frame(s: Show, now: number, o: FrameOptions = {}): Frame {
+  const f = matchFrame(s, now, o)
+  return s.fans.length > 0 ? { ...f, crowd: crowd(s, now, o.high) } : f
 }
 
-function matchFrame(s: Show, now: number): Frame {
+/** The bonk at `now` (`at` when it began): the froglets dash to the middle, see stars, and go back; no big frogs. */
+export function bonkFrame(now: number, at: number): Frame {
+  const t = now - at
+  const meet = COLUMNS / 2 - 4 // the left froglet's column when they touch
+  const k = t < T.dash ? t / T.dash : t < T.dash + T.bonk ? 1 : 1 - (t - T.dash - T.bonk) / T.back
+  const lc = Math.round(k * meet)
+  const rc = COLUMNS - 4 - lc
+  const dizzy = t >= T.dash && t < T.dash + T.bonk
+  const blank = new Canvas(COLUMNS, ROWS)
+  blank.table()
+  // seeing stars: the froglets keep their row, a row of stars twinkles in the cell row over their heads
+  const ph = Math.floor(t / 200)
+  if (dizzy) {
+    blank.sprite(spriteCells(starsAbove(FROGLET, ph)), 4, lc, 0)
+    blank.sprite(spriteCells(starsAbove(FROGLET, ph + 1), true), 4, rc, 0)
+  } else {
+    blank.sprite(spriteCells(FROGLET), 4, lc, 1)
+    blank.sprite(spriteCells(FROGLET, true), 4, rc, 1)
+  }
+  if (dizzy) blank.put(COLUMNS / 2 - 1 + (Math.floor(t / 200) % 2), 0, [0x2736, STAR, 0x01000000]) // ✶
+  const stars = (p: number) => (dizzy ? { stars: p } : {})
+  return {
+    left: frogCells(null, 'left'),
+    table: blank.cells(),
+    right: frogCells(null, 'right'),
+    look: { left: null, right: null, ball: null, froglets: [{ column: lc, mirror: false, ...stars(ph) }, { column: rc, mirror: true, ...stars(ph + 1) }] },
+  }
+}
+
+function matchFrame(s: Show, now: number, o: FrameOptions): Frame {
+  const high = !!o.high
   const c = new Canvas(COLUMNS, ROWS)
   c.table()
-  const b = ballAt(s.p, COLUMNS, ROWS)
-  const restY = ROWS * 4 - 3
-  let ballPos: { x: number; y: number } | null = null
+  const b = high ? highBallAt(s.p) : ballAt(s.p, COLUMNS, ROWS)
+  const restY = high ? HIGH_REST_Y : ROWS * 4 - 3
+  let ballPos: { x: number; y: number; hi?: boolean } | null = null
   const ball = (x: number, y: number) => {
-    c.ball(x, y)
-    ballPos = { x: Math.round(x), y: Math.round(y) }
+    if (high) {
+      const hx = Math.max(SCORE_W * 2, Math.min(HIGH_MAX_X, x))
+      const hy = Math.min(HIGH_REST_Y, y)
+      c.ball(hx, hy, BALL_HI)
+      ballPos = { x: Math.round(hx), y: Math.round(hy), hi: true }
+    } else {
+      c.ball(x, y)
+      ballPos = { x: Math.round(x), y: Math.round(y) }
+    }
   }
   // the three pictures, the frogs by name: the cells follow from the names, a letter or two laid over them
   const out = (l: FrogLook | null, r: FrogLook | null, over?: { left?: (x: Cell[]) => Cell[]; right?: (x: Cell[]) => Cell[] }, table?: Canvas, froglets: Look['froglets'] = []): Frame => {
@@ -434,6 +494,13 @@ function matchFrame(s: Show, now: number): Frame {
     }
   }
 
+  const squish = (): Frame => {
+    ball(s.sleepAt !== null ? s.sleepX : b.x, restY)
+    const pose: PoseName = s.squishEndAt !== null ? 'up' : 'flat' // popping back up, or flat
+    return out({ pose }, { pose })
+  }
+
+  if (o.squishFirst && squishing(s, now)) return squish()
   if (s.sleepAt !== null) {
     const t = now - s.sleepAt
     const k = Math.min(1, t / T.roll)
@@ -450,42 +517,13 @@ function matchFrame(s: Show, now: number): Frame {
       s.winner === 'right' && hop ? { pose: 'up', hop: true } : { pose: 'down' },
     )
   }
-  if (squishing(s, now)) {
-    const popping = s.squishEndAt !== null
-    ball(b.x, restY)
-    const pose: PoseName = popping ? 'up' : 'flat'
-    return out({ pose }, { pose })
-  }
+  if (squishing(s, now)) return squish()
   if (s.waitAt !== null) {
     ball(COLUMNS - 1, restY) // resting mid-table
     const tap = Math.floor((now - s.waitAt) / 250) % 2 === 1
     return out({ pose: 'face' }, { pose: tap ? 'tap' : 'face' })
   }
-  if (within(s.bonkAt, now, BONK_MS)) {
-    const t = now - s.bonkAt!
-    const meet = COLUMNS / 2 - 4 // the left froglet's column when they touch
-    const k = t < T.dash ? t / T.dash : t < T.dash + T.bonk ? 1 : 1 - (t - T.dash - T.bonk) / T.back
-    const lc = Math.round(k * meet)
-    const rc = COLUMNS - 4 - lc
-    const dizzy = t >= T.dash && t < T.dash + T.bonk
-    const blank = new Canvas(COLUMNS, ROWS)
-    blank.table()
-    // seeing stars: the froglets keep their row, a row of stars twinkles in the cell row over their heads
-    const ph = Math.floor(t / 200)
-    if (dizzy) {
-      blank.sprite(spriteCells(starsAbove(FROGLET, ph)), 4, lc, 0)
-      blank.sprite(spriteCells(starsAbove(FROGLET, ph + 1), true), 4, rc, 0)
-    } else {
-      blank.sprite(spriteCells(FROGLET), 4, lc, 1)
-      blank.sprite(spriteCells(FROGLET, true), 4, rc, 1)
-    }
-    if (dizzy) blank.put(COLUMNS / 2 - 1 + (Math.floor(t / 200) % 2), 0, [0x2736, STAR, 0x01000000]) // ✶
-    const stars = (p: number) => (dizzy ? { stars: p } : {})
-    return out(null, null, undefined, blank, [
-      { column: lc, mirror: false, ...stars(ph) },
-      { column: rc, mirror: true, ...stars(ph + 1) },
-    ])
-  }
+  if (within(s.bonkAt, now, BONK_MS)) return bonkFrame(now, s.bonkAt!)
   if (within(s.beanAt, now, BEAN_MS)) {
     const t = now - s.beanAt!
     const side = s.beanSide
@@ -552,8 +590,9 @@ function matchFrame(s: Show, now: number): Frame {
  * What the show is doing, as a key: it changes whenever the pictures take a turn no reel could foresee (an event,
  * the fly, a long turn starting, a reaction ending, a fan coming or going). The desktop band redraws when it changes.
  */
-export const course = (s: Show, now: number): string =>
+export const course = (s: Show, now: number, prefix: readonly unknown[] = []): string =>
   JSON.stringify([
+    ...prefix,
     s.working, s.turnAt, s.sleepAt, s.endAt, s.endKind, s.winner, s.squishAt, s.squishEndAt, s.waitAt, s.bonkAt, s.beanAt, s.wakeAt, s.flyAt, s.fans,
     squishing(s, now), within(s.bonkAt, now, BONK_MS), within(s.beanAt, now, BEAN_MS), within(s.wakeAt, now, T.wake), outro(s, now),
     s.turnAt !== null && now - s.turnAt >= T.longTurn,
@@ -562,24 +601,31 @@ export const course = (s: Show, now: number): string =>
 export const REEL_MS = 2000 // how far ahead a reel that does not loop is drawn
 export const REEL_STEP = 66 // its frame time, the terminal's tick
 
-export type Reel = { frames: { frame: Frame; ms: number }[]; loop: boolean; until: number; course: string }
+export type Timed = { frame: Frame; ms: number }
+export type Reel = { frames: Timed[]; loop: boolean; until: number; course: string }
+/**
+ * How a reel is drawn beside its frames' options: `under` lays something under the match's table at reel time `t`
+ * (a reel with one never loops: what it lays cannot be told ahead), `course` heads the reel's course key.
+ */
+export type ReelOptions = FrameOptions & { under?: (t: number, table: Cell[]) => Cell[]; course?: readonly unknown[] }
 
 /**
  * The pictures from `now` on (the score by its frogs, the fans on the table), worked out ahead with the same step
  * and frame the terminal ticks through: one rally looped while nothing else goes on, else the next REEL_MS played
  * once (`until`: when it runs out).
  */
-export function reel(s: Show, now: number, sc: Score = { left: 0, right: 0 }): Reel {
+export function reel(s: Show, now: number, sc: Score = { left: 0, right: 0 }, o: ReelOptions = {}): Reel {
   const settled = s.fans.every((f) => f.goneAt === null && now - f.at >= T.arrive) // no fan coming or going
-  const plain = rallying(s, now) && s.flyAt === null && settled && !(s.turnAt !== null && now - s.turnAt + T.cycle >= T.longTurn)
+  const plain = !o.under && rallying(s, now) && s.flyAt === null && settled && !(s.turnAt !== null && now - s.turnAt + T.cycle >= T.longTurn)
   const span = plain ? T.cycle : REEL_MS
-  const frames: { frame: Frame; ms: number }[] = []
+  const frames: Timed[] = []
   let st = { ...s, lastAt: now }
   for (let t = 0; t < span; t += REEL_STEP) {
     st = step(st, now + t)
     // a looped rally keeps the fly out: if one comes, the show changes course and the band redraws then
-    const f = frame(plain ? { ...st, flyAt: null } : st, now + t)
-    frames.push({ frame: { ...f, table: layFans(withScore(f.table, sc), f.crowd) }, ms: Math.min(REEL_STEP, span - t) })
+    const f = frame(plain ? { ...st, flyAt: null } : st, now + t, o)
+    const table = o.under ? o.under(t, f.table) : f.table
+    frames.push({ frame: { ...f, table: layFans(withScore(table, sc), f.crowd) }, ms: Math.min(REEL_STEP, span - t) })
   }
-  return { frames, loop: plain, until: plain ? Infinity : now + span, course: course(s, now) }
+  return { frames, loop: plain, until: plain ? Infinity : now + span, course: course(s, now, o.course) }
 }

@@ -11,6 +11,8 @@ export const DEFAULT_COLOR = 0x01000000
 export type Cell = [number, number, number]
 
 export const BALL = 0xfff2cc
+/** The ball raised over a living table top (show.ts's `high` frames): a bright aqua. */
+export const BALL_HI = 0x4df8ff
 export const TABLE = 0x5a6a78
 export const TONGUE = 0xe0607a
 export const FLY = 0xb8b8b8
@@ -247,6 +249,15 @@ export const FROG_FLAT: readonly string[] = [
   '........',
   'GWKGGWKG',
   'BBGRRGBB',
+]
+/** The frog at rest with nothing to do: heavy lids, a downturned mouth (a pose for an add-on's scene; the match never shows it). */
+export const FROG_SAD: readonly string[] = [
+  '........',
+  '.DGGGGD.',
+  'GDDGGDDG',
+  'GGWKGWKG',
+  '.GGRRGG.',
+  '.BRGGRB.',
 ]
 /** Tongue out to the side (the fly). */
 export const FROG_TONGUE: readonly string[] = [

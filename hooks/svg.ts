@@ -9,9 +9,9 @@
 // a frog that holds a pose for half a rally is drawn once, not on every frame. The app animates the band itself and the
 // mod redraws only when the show changes course (see register.tsx).
 
-import { BALL, DEFAULT_COLOR, QUAD, TABLE, type Cell } from './pong'
+import { BALL, BALL_HI, DEFAULT_COLOR, FLY, QUAD, TABLE, TONGUE, type Cell } from './pong'
 import { COLUMNS, FROG_COLUMNS, ROWS, type Frame } from './show'
-import { BALLS, DESK_SIZE, FANS, FROGLETS, FROGS, SPRITE_PALETTE, STARS, type SpriteSize, fineUnit, unit } from './sprites'
+import { BALLS, BALLS_HI, DESK_SIZE, FANS, FROGLETS, FROGS, SPRITE_PALETTE, STARS, type SpriteSize, fineUnit, unit } from './sprites'
 
 /** How the desktop band draws: the sprites at a scale, or the terminal's cells. */
 export type Style = SpriteSize | 'cells'
@@ -57,6 +57,7 @@ const digit = (rows: readonly string[]): string[] => ['....', ...rows.map((r) =>
 // star, the score and the fans' "+N".
 const GLYPHS: Readonly<Record<number, readonly string[]>> = {
   ...Object.fromEntries(DIGITS.map((d, i) => [0x30 + i, digit(d)])),
+  0x3a: ['....', '....', '.#..', '....', '....', '.#..', '....', '....'], // :
   0x7a: ['....', '....', '....', '####', '..#.', '.#..', '####', '....'], // z
   0x5a: ['....', '####', '...#', '..#.', '.#..', '#...', '####', '....'], // Z
   0x2b: ['....', '....', '.#..', '###.', '.#..', '....', '....', '....'], // +
@@ -142,12 +143,20 @@ function boardRects(out: Rect[]): void {
 
 type Parts = Record<string, Rect[]>
 
-/** The parts of one frame in a sprite style: the board, each frog, the ball, each fan, and the rest of the table. */
+/** Braille colours that are no living table top: the table's dots, the ball (both), the fly, the tongue. */
+const NOT_TOP = new Set([TABLE, BALL, BALL_HI, FLY, TONGUE])
+/** A cell of a living table top laid under the match (show.ts high frames): lit braille in the bottom row, its own colour. */
+const isTop = (c: Cell, row: number) => row === ROWS - 1 && isBraille(c[0]) && c[0] !== 0x2800 && !NOT_TOP.has(c[1])
+
+/**
+ * The parts of one frame in a sprite style: the board (the little table) or none, a table top laid on it, each frog,
+ * the ball, each fan, and the rest of the table.
+ */
 function spriteParts(f: Frame, size: SpriteSize): Parts {
   const u = unit(size)
-  const parts: Parts = { board: [], left: [], right: [], table: [], ball: [] }
-  boardRects(parts.board!)
+  const parts: Parts = { board: [], top: [], left: [], right: [], table: [], ball: [] }
   const look = f.look
+  if (!look || look.board !== false) boardRects(parts.board!)
   const letters = (c: Cell) => !isBlock(c[0]) && !isBraille(c[0]) && c[0] !== 0x20
   for (const side of ['left', 'right'] as const) {
     const ox = side === 'left' ? 0 : RIGHT_X
@@ -168,20 +177,25 @@ function spriteParts(f: Frame, size: SpriteSize): Parts {
     }
     gridRects(f[side], FROG_COLUMNS, ox, 0, out, letters) // z Z z, the wake-up '!'
   }
-  // the table's cells: the fly, the tongue, the score and "+N" (lifted onto the slab), the bonk's ✶
+  // the table's cells: the fly, the tongue, the score and "+N" (lifted onto the slab), the bonk's ✶; a living table
+  // top's dots (lifted too: they rise from the slab); with no board, the table's cells as the terminal draws them
+  const lift = (row: number) => (row === ROWS - 1 ? 32 - SURFACE : 0)
   if (!look) gridRects(f.table, COLUMNS, TABLE_X, TABLE_Y, parts.table!)
-  else
+  else if (look.board === false) gridRects(f.table, COLUMNS, TABLE_X, TABLE_Y, parts.top!, (c) => c[0] !== 0x20 && !isBlock(c[0]))
+  else {
+    gridRects(f.table, COLUMNS, TABLE_X, TABLE_Y, parts.top!, isTop, lift)
     gridRects(
       f.table,
       COLUMNS,
       TABLE_X,
       TABLE_Y,
       parts.table!,
-      (c) => c[0] !== 0x20 && !isBlock(c[0]) && !(isBraille(c[0]) && (c[0] === 0x2800 || c[1] === TABLE || c[1] === BALL)),
-      (row) => (row === ROWS - 1 ? 32 - SURFACE : 0),
+      (c, row) => c[0] !== 0x20 && !isBlock(c[0]) && !isTop(c, row) && !(isBraille(c[0]) && (c[0] === 0x2800 || c[1] === TABLE || c[1] === BALL || c[1] === BALL_HI)),
+      lift,
     )
+  }
   if (look) {
-    if (look.ball) spriteRects(BALLS[size], TABLE_X + look.ball.x * 2, TABLE_Y + look.ball.y * 2 - 2, fineUnit(size), parts.ball!)
+    if (look.ball) spriteRects((look.ball.hi ? BALLS_HI : BALLS)[size], TABLE_X + look.ball.x * 2, TABLE_Y + look.ball.y * 2 - 2, fineUnit(size), parts.ball!)
     for (const g of look.froglets) {
       const fx = TABLE_X + g.column * CW
       const rows = FROGLETS[size]
@@ -226,9 +240,25 @@ const hex = (c: number) => '#' + (c & 0xffffff).toString(16).padStart(6, '0')
  */
 const grain = (style: Style): number => (style === 'cells' ? 1 : 3)
 
-/** One path per colour, each pixel run a rect subpath; runs of the same colour and height on a row join. */
-function paths(rects: readonly Rect[], style: Style): string {
-  const g = grain(style)
+/** Runs of the same left edge and width that touch top to bottom join into one taller rect (a table top's bars). */
+function stack(runs: Rect[]): Rect[] {
+  runs.sort((a, b) => a.x - b.x || a.w - b.w || a.y - b.y)
+  const out: Rect[] = []
+  for (const r of runs) {
+    const last = out[out.length - 1]
+    if (last && last.x === r.x && last.w === r.w && last.y + last.h === r.y) last.h += r.h
+    else out.push({ ...r })
+  }
+  return out
+}
+
+/**
+ * One path per colour, each pixel run a rect subpath; runs of the same colour and height on a row join. `whole`: every
+ * rect is on whole units (a table top's dots), so its runs also stack in columns and are written in units under one
+ * scale, keeping the numbers short.
+ */
+function paths(rects: readonly Rect[], style: Style, whole = false): string {
+  const g = whole ? 1 : grain(style)
   const n = (v: number) => Math.round(v * g * 1000) / 1000
   const byColor = new Map<number, Rect[]>()
   for (const q of rects) {
@@ -246,11 +276,13 @@ function paths(rects: readonly Rect[], style: Style): string {
       if (last && last.y === r.y && last.h === r.h && last.x + last.w === r.x) last.w += r.w
       else if (!(last && last.y === r.y && last.h === r.h && r.x >= last.x && r.x + r.w <= last.x + last.w)) runs.push({ ...r })
     }
-    const d = runs.map((r) => 'M' + r.x + ' ' + r.y + 'h' + r.w + 'v' + r.h + 'h-' + r.w + 'z').join('')
+    const d = (whole ? stack(runs) : runs).map((r) => 'M' + r.x + ' ' + r.y + 'h' + r.w + 'v' + r.h + 'h-' + r.w + 'z').join('')
     out += '<path fill="' + hex(color) + '" d="' + d + '"/>'
   }
-  return out
+  return whole && out !== '' && grain(style) !== 1 ? '<g transform="scale(' + grain(style) + ')">' + out + '</g>' : out
 }
+/** A part's paths: a table top's in whole units (see paths). */
+const partPaths = (key: string, rects: readonly Rect[], style: Style): string => paths(rects, style, key === 'top')
 
 /** A frame and how long it shows, in ms. */
 export type Timed = { frame: Frame; ms: number }
@@ -260,13 +292,13 @@ const head = (style: Style, body: string) =>
   '" shape-rendering="crispEdges">' + body + '</svg>'
 
 /** The order the parts are drawn in: the board under all, the fans under the ball, the frogs on top. */
-const ORDER = ['board', 'fan3', 'fan2', 'fan1', 'fan0', 'table', 'ball', 'left', 'right']
+const ORDER = ['board', 'top', 'fan3', 'fan2', 'fan1', 'fan0', 'table', 'ball', 'left', 'right']
 const ordered = (parts: Parts): string[] => [...ORDER.filter((k) => k in parts), ...Object.keys(parts).filter((k) => !ORDER.includes(k))]
 
 /** One still frame as an SVG document. */
 export const svgFrame = (f: Frame, style: Style = DESK_STYLE): string => {
   const parts = partsOf(f, style)
-  return head(style, ordered(parts).map((k) => paths(parts[k]!, style)).join(''))
+  return head(style, ordered(parts).map((k) => partPaths(k, parts[k]!, style)).join(''))
 }
 
 const same = (a: Frame, b: Frame) => a.left.length === b.left.length && JSON.stringify(a) === JSON.stringify(b)
@@ -297,7 +329,7 @@ function book(frames: readonly Timed[], loop: boolean, style: Style): string {
     const parts = partsOf(t.frame, style)
     for (const key of ordered(parts)) if (!tracks.has(key)) tracks.set(key, [])
     for (const [key, list] of tracks) {
-      const svg = parts[key] ? paths(parts[key]!, style) : ''
+      const svg = parts[key] ? partPaths(key, parts[key]!, style) : ''
       const last = list[list.length - 1]
       if (last && last.svg === svg && last.to === at) last.to = at + t.ms
       else list.push({ svg, from: at, to: at + t.ms })

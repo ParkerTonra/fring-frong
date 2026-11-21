@@ -1,8 +1,7 @@
 // Fring Frong's desktop sprites: the terminal's own frogs (hooks/pong.ts), each of their pixels scaled up to a 2 x 2 or
 // 3 x 3 block, then lightly refined: a dark outline, one highlight and one shade on the green, a catchlight in each
 // pupil, the blocks' outer corners rounded at 3x. The same wide, short frog: square eyes on top, the brown mouth band,
-// the blue shirt. DESK_SIZE picks the scale the band draws. Pure data and no imports, so another mod (now-playing) can
-// take this file as it is.
+// the blue shirt. DESK_SIZE picks the scale the band draws. Pure data and no imports, and no imports.
 //
 // MADE BY tools/make-sprites.ts (deno run --allow-read --allow-write tools/make-sprites.ts) from
 // tools/sprites.template.txt: change the originals or the recipe there, not the rows here.
@@ -36,9 +35,12 @@ export const SPRITE_PALETTE: Readonly<Record<string, number>> = {
   h: 0xffffff, // ball highlight
   c: 0xfff2cc, // ball
   e: 0xd4c08f, // ball shade
+  A: 0xd2fdff, // the raised ball's highlight
+  a: 0x4df8ff, // the raised ball (pong.ts BALL_HI)
+  q: 0x25b8cc, // the raised ball's shade
 }
 
-/** The big frog's poses (facing right, the left frog; mirror for the right one). `sad` is now-playing's. */
+/** The big frog's poses (facing right, the left frog; mirror for the right one). `sad`: the frog at rest with nothing to do. */
 export type FrogPose = 'down' | 'up' | 'face' | 'tap' | 'shrug' | 'yawn' | 'sleep' | 'flat' | 'tongue' | 'sad'
 
 export const FROGS: Readonly<Record<SpriteSize, Readonly<Record<FrogPose, readonly string[]>>>> = {
@@ -556,6 +558,12 @@ export const FROGLETS: Readonly<Record<SpriteSize, readonly string[]>> = {
 export const BALLS: Readonly<Record<SpriteSize, readonly string[]>> = {
   2: ['.cc.', 'chcc', 'ccce', '.ee.'],
   3: ['.cccc.', 'chhccc', 'chcccc', 'cccccc', 'ccccee', '.eeee.'],
+}
+
+/** The raised ball (show.ts high frames, over a living table top): the same ball in its bright aqua. */
+export const BALLS_HI: Readonly<Record<SpriteSize, readonly string[]>> = {
+  2: BALLS[2].map((r) => r.replace(/h/g, 'A').replace(/c/g, 'a').replace(/e/g, 'q')),
+  3: BALLS[3].map((r) => r.replace(/h/g, 'A').replace(/c/g, 'a').replace(/e/g, 'q')),
 }
 
 /** A twinkling star (the terminal's star pixel), frog pixels, its two phases. */

@@ -79,7 +79,7 @@ again: `claude plugin uninstall fring-frong@fring-frong` and `claude plugin mark
 Inside Claude Code:
 
 ```
-/plugin marketplace add ParkerTonra/fring-frong
+/plugin marketplace add <owner>/<repo>
 /plugin install fring-frong@fring-frong
 ```
 
@@ -88,7 +88,10 @@ marketplace `fring-frong`). Start a new session, or run `/reload-plugins`, to se
 
 ## Develop
 
-- `hooks/register.tsx`: the hooks: which events drive which reaction, the band, the animation timer.
+- `hooks/register.tsx`: the hooks: which events drive which reaction.
+- `hooks/game.ts`: the game kept for the session (the show, the score, the work running) and the mod's `$.state`.
+- `hooks/match.tsx`: the band itself (`hooks/stage.ts` names it): the terminal's Rasters and blits, the desktop's
+  flipbook, the animation timer.
 - `hooks/show.ts`: the pure state machine, timings and pictures for every reaction.
 - `hooks/pong.ts`: the pure drawing code (frog sprites, the braille table canvas, cell encoding).
 - `hooks/svg.ts`: the pure desktop drawing: the sprites (or the cell grid) as pixel rects, and the SMIL flipbook.

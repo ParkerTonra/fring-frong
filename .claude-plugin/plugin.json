@@ -1,7 +1,7 @@
 {
   "name": "fring-frong",
   "displayName": "Fring Frong",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Fring Frong: two frogs play ping pong above the prompt while Claude works on a turn",
   "author": {
     "name": "ParkerTonra"

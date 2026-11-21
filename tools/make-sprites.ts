@@ -1,12 +1,10 @@
-// Makes hooks/sprites.ts from the terminal's own frogs (hooks/pong.ts, and now-playing's sad frog): every original
+// Makes hooks/sprites.ts from the terminal's own frogs (hooks/pong.ts, the sad frog at rest too): every original
 // pixel scaled up to a k x k block (k = 2 and 3), then lightly refined: a dark outline around the silhouette, one
 // highlight and one shade on the green, a catchlight in each pupil, the outer corners of the blocks rounded at 3x.
 // Nothing else is added, so the desktop frogs stay the terminal's frogs.
 //   deno run --allow-read --allow-write tools/make-sprites.ts
 import * as P from '../hooks/pong.ts'
 
-// now-playing's FROG_SAD (mods/now-playing/hooks/scope.ts), copied so this file reads one mod only
-const FROG_SAD = ['........', '.DGGGGD.', 'GDDGGDDG', 'GGWKGWKG', '.GGRRGG.', '.BRGGRB.']
 // the terminal's fan (show.ts FAN), quadrant pixels half a cell wide and half a cell tall: each row doubled here so
 // the pixels are square (2 x 2 view units)
 const FAN = {
@@ -100,7 +98,7 @@ const tall = (rows: readonly string[]) => rows.flatMap((r) => [r, r])
 
 const POSES = {
   down: P.FROG_DOWN, up: P.FROG_UP, face: P.FROG_FACE, tap: P.FROG_TAP, shrug: P.FROG_SHRUG, yawn: P.FROG_YAWN,
-  sleep: P.FROG_SLEEP, flat: P.FROG_FLAT, tongue: P.FROG_TONGUE, sad: FROG_SAD,
+  sleep: P.FROG_SLEEP, flat: P.FROG_FLAT, tongue: P.FROG_TONGUE, sad: P.FROG_SAD,
 }
 export const make = (k: number) => ({
   frogs: Object.fromEntries(Object.entries(POSES).map(([n, rows]) => [n, refine(rows, k)])),
