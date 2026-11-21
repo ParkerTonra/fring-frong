@@ -1,0 +1,11 @@
+{
+  "name": "fring-frong",
+  "displayName": "Fring Frong",
+  "version": "0.4.1",
+  "description": "Fring Frong: two frogs play ping pong above the prompt while Claude works on a turn",
+  "author": {
+    "name": "ParkerTonra"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

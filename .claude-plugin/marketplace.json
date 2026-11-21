@@ -1,0 +1,14 @@
+{
+  "name": "fring-frong",
+  "owner": {
+    "name": "ParkerTonra"
+  },
+  "description": "Fring Frong, a Claude Code mod: two frogs play ping pong while Claude works",
+  "plugins": [
+    {
+      "name": "fring-frong",
+      "source": "./",
+      "description": "Two frogs play ping pong above the prompt while Claude works"
+    }
+  ]
+}
