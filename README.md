@@ -79,12 +79,11 @@ again: `claude plugin uninstall fring-frong@fring-frong` and `claude plugin mark
 Inside Claude Code:
 
 ```
-/plugin marketplace add <owner>/<repo>
+/plugin marketplace add ParkerTonra/fring-frong
 /plugin install fring-frong@fring-frong
 ```
 
-`<owner>/<repo>` is the GitHub repository that holds this folder (its `.claude-plugin/marketplace.json` names the
-marketplace `fring-frong`). Start a new session, or run `/reload-plugins`, to see it.
+Start a new session, or run `/reload-plugins`, to see it.
 
 ## Develop
 
